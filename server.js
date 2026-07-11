@@ -5,20 +5,26 @@ import { Server } from "socket.io";
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+    "http://localhost:5173",
+    "https://YOUR-VERCEL-URL.vercel.app",
+];
+
+app.use(
+    cors({
+        origin: allowedOrigins,
+        credentials: true,
+    })
+);
 
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
-
     cors: {
-
-        origin: "*",
-
+        origin: allowedOrigins,
+        credentials: true,
     },
-
     maxHttpBufferSize: 1e8,
-
 });
 
 const rooms = new Map();
@@ -39,13 +45,9 @@ io.on("connection", (socket) => {
             .toUpperCase();
 
         rooms.set(roomId, {
-
             host: socket.id,
-
             guest: null,
-
             ready: new Set(),
-
         });
 
         socket.join(roomId);
@@ -65,19 +67,13 @@ io.on("connection", (socket) => {
         const room = rooms.get(roomId);
 
         if (!room) {
-
             socket.emit("room-not-found");
-
             return;
-
         }
 
         if (room.guest && room.guest !== socket.id) {
-
             socket.emit("room-full");
-
             return;
-
         }
 
         room.guest = socket.id;
@@ -104,13 +100,11 @@ io.on("connection", (socket) => {
 
         room.ready.add(socket.id);
 
-        console.log(
-            `📷 Camera Ready ${room.ready.size}/2`
-        );
+        console.log(`📷 Camera Ready ${room.ready.size}/2`);
 
         if (room.ready.size === 2) {
 
-            console.log("🚀 Sending create-offer");
+            console.log("🚀 Creating Offer");
 
             io.to(room.host).emit("create-offer");
 
@@ -143,7 +137,7 @@ io.on("connection", (socket) => {
     });
 
     // ==========================================
-    // ICE
+    // ICE CANDIDATES
     // ==========================================
 
     socket.on("ice-candidate", ({ roomId, candidate }) => {
@@ -153,12 +147,12 @@ io.on("connection", (socket) => {
     });
 
     // ==========================================
-    // PHOTO SESSION
+    // START PHOTO SESSION
     // ==========================================
 
     socket.on("start-session", ({ roomId }) => {
 
-        console.log("📸 Starting Photo Session");
+        console.log("📸 Starting Session");
 
         io.to(roomId).emit("start-countdown");
 
@@ -170,20 +164,13 @@ io.on("connection", (socket) => {
 
     socket.on("photo-captured", ({ roomId, image, index }) => {
 
-        console.log(
+        console.log(`📸 Photo ${index + 1} received`);
 
-            `📸 Photo ${index} received from ${socket.id}`
-
-        );
-
-        io.to(roomId).emit("partner-photo", {
-
+        // Send ONLY to partner
+        socket.to(roomId).emit("partner-photo", {
             sender: socket.id,
-
             image,
-
             index,
-
         });
 
     });
@@ -199,18 +186,15 @@ io.on("connection", (socket) => {
         for (const [roomId, room] of rooms.entries()) {
 
             if (
-
                 room.host === socket.id ||
-
                 room.guest === socket.id
-
             ) {
 
                 io.to(roomId).emit("partner-left");
 
                 rooms.delete(roomId);
 
-                console.log("🗑 Room Deleted:", roomId);
+                console.log("🗑 Deleted Room:", roomId);
 
                 break;
 
@@ -222,15 +206,25 @@ io.on("connection", (socket) => {
 
 });
 
+// ==========================================
+// HEALTH CHECK
+// ==========================================
+
 app.get("/", (_, res) => {
 
-    res.send("SpiderVerse Signaling Server Running");
+    res.send("🕷 Spider Society Signaling Server Running");
 
 });
 
-httpServer.listen(3001, () => {
+// ==========================================
+// START SERVER
+// ==========================================
 
-    console.log("🚀 Server running on http://localhost:3001");
+const PORT = process.env.PORT || 3001;
+
+httpServer.listen(PORT, () => {
+
+    console.log(`🚀 Server running on port ${PORT}`);
 
 });
 
